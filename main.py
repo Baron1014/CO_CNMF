@@ -3,9 +3,12 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from sklearn import linear_model
 import cv2
+import datetime 
 
-def main():
+def main(kronecker_product):
+    start = datetime.datetime.now()
     data = scipy.io.loadmat("data.mat")
     print(data.keys())
     print(f"Ym : {data['Ym'].shape}")
@@ -26,17 +29,53 @@ def main():
     Ym_L,Ym_M = (data["Ym"].shape[0])**2, data["Ym"].shape[2]
     Yh_L,Yh_M = (data["Yh"].shape[0])**2, data["Yh"].shape[2]
 
-    # init A, S
+    # init A, S, B
     A = get_gaussian_array(Yh_M, data['N'][0,0])
     S = get_gaussian_array(data['N'][0,0], Ym_L)
-
+    B = get_gaussian_array(Ym_L, Yh_L)
     print(A.shape, S.shape)
+
+    # identity matrix
+    I_L = np.identity(Ym_L)
+    I_M = np.identity(Yh_M)
+
+    # vec(Array)
+    vec_s = S.flatten('F').reshape(-1, 1)
+    vec_a = A.flatten('F').reshape(-1, 1)
+    print(f"vec_s: {vec_s.shape}, vec_a: {vec_a.shape}")
 
     # get C
     D = data['D']
-    C1 = np.dot(D,A)
-    C2 = kronecker_product(S.T, D)
-    print(C2.shape)
+    print("start compute C1 ...")
+    C1 = list()
+    C1.append(kronecker_product(B.T, A).T)
+    C1.append(kronecker_product(I_L, np.dot(D,A)))
+    print(f"C1 = [{C1[0].shape}, {C1[1].shape} ]")
+    print("start compute C2 ...")
+    C2 = list()
+    C2.append(kronecker_product(np.dot(S,B).T, I_M))
+    C2.append(kronecker_product(S.T, D))
+    print(f"C2 = [{C2[0].shape}, {C2[1].shape} ]")
+
+    # 計算lasso及ridge regression
+    lasso = linear_model.Lasso(alpha=0.1, max_iter=1)
+    train_X = np.concatenate((np.dot(C1[0], vec_s), np.dot(C1[1], vec_s)), axis=0)
+    train_Y = np.concatenate((data['Yh'].reshape(-1,1), data['Ym'].reshape(-1,1)), axis=0)
+    lasso.fit(train_X, train_Y)
+    S = lasso.predict(S.reshape(-1, 1)).reshape(data['N'][0,0], Ym_L)
+
+    ridge = linear_model.Ridge(alpha=0.1, max_iter=1)
+    train_X = np.concatenate((np.dot(C2[0], vec_a), np.dot(C2[1], vec_a)), axis=0)
+    train_Y = np.concatenate((data['Yh'].reshape(-1,1), data['Ym'].reshape(-1,1)), axis=0)
+    ridge.fit(train_X, train_Y)
+    A = ridge.predict(S.reshape(-1, 1)).reshape(Yh_M, data['N'][0,0])
+
+    new_Z = np.dot(A, S)
+    plot(new_Z, "result_1_iter")
+
+    end = datetime.datetime.now()
+    print(f"Total Cost: {end-start}")
+
 
 def get_gaussian_array(x1, x2):
     return np.random.normal(loc=1, scale=2, size=(x1, x2))
@@ -75,20 +114,33 @@ def kronecker_product(arr1, arr2):
 
 
 if __name__ == "__main__":
-    arr1 = np.array([
-        [1,2,3], 
-        [4,5,6] 
-    ])
+    # 比較自己kron跟numpy的速度
+    main(kronecker_product = lambda x, y: np.kron(x,y))
+    main(kronecker_product = lambda x, y: kronecker_product(x,y))
 
-    arr2 = np.array([
-        [2,3,4,5], 
-        [2,3,4,5] 
-    ])
-    output = kronecker_product(arr1, arr2)
-    print(output.shape)
-    print(output)
+    #arr1 = np.array([
+        #[1,2,3,4],
+        #[2,3,4,5],
+        #[3,4,5,6]
+    #])
+    #arr2 = np.array([
+        #[1,2,3,4],
+        #[1,2,3,4],
+        #[1,2,3,4]
+    #])
+    #arr3 = arr1 - arr2
 
-    main()
+    #lasso = linear_model.Lasso(alpha=0.1, max_iter=1)
+    #lasso.fit(arr1.reshape(-1 ,1), arr2.reshape(-1, 1))
+    #score = lasso.score(arr1.reshape(-1 ,1), arr2.reshape(-1, 1))
+    #predict = lasso.predict(arr1.reshape(-1 ,1))
+    #print(arr1.reshape(1,-1))
+    #print(arr2.reshape(1,-1))
+    #print(predict)
+    #print(lasso.n_iter_)
+
+
+
 
 
         
