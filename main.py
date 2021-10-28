@@ -8,7 +8,6 @@ import cv2
 import datetime 
 
 def main(kronecker_product):
-    start = datetime.datetime.now()
     data = scipy.io.loadmat("data.mat")
     print(data.keys())
     print(f"Ym : {data['Ym'].shape}")
@@ -39,42 +38,47 @@ def main(kronecker_product):
     I_L = np.identity(Ym_L)
     I_M = np.identity(Yh_M)
 
-    # vec(Array)
-    vec_s = S.flatten('F').reshape(-1, 1)
-    vec_a = A.flatten('F').reshape(-1, 1)
-    print(f"vec_s: {vec_s.shape}, vec_a: {vec_a.shape}")
+    # epochs = 10
+    epochs = 10
+    for epoch in range(epochs): 
+        start = datetime.datetime.now()
+        # vec(Array)
+        vec_s = S.flatten('F').reshape(-1, 1)
+        vec_a = A.flatten('F').reshape(-1, 1)
+        print(f"vec_s: {vec_s.shape}, vec_a: {vec_a.shape}")
 
-    # get C
-    D = data['D']
-    print("start compute C1 ...")
-    C1 = list()
-    C1.append(kronecker_product(B.T, A).T)
-    C1.append(kronecker_product(I_L, np.dot(D,A)))
-    print(f"C1 = [{C1[0].shape}, {C1[1].shape} ]")
-    print("start compute C2 ...")
-    C2 = list()
-    C2.append(kronecker_product(np.dot(S,B).T, I_M))
-    C2.append(kronecker_product(S.T, D))
-    print(f"C2 = [{C2[0].shape}, {C2[1].shape} ]")
+        # get C
+        D = data['D']
+        print("start compute C1 ...")
+        C1 = list()
+        C1.append(kronecker_product(B.T, A).T)
+        C1.append(kronecker_product(I_L, np.dot(D,A)))
+        print(f"C1 = [{C1[0].shape}, {C1[1].shape} ]")
+        print("start compute C2 ...")
+        C2 = list()
+        C2.append(kronecker_product(np.dot(S,B).T, I_M))
+        C2.append(kronecker_product(S.T, D))
+        print(f"C2 = [{C2[0].shape}, {C2[1].shape} ]")
 
-    # 計算lasso及ridge regression
-    lasso = linear_model.Lasso(alpha=0.1, max_iter=1)
-    train_X = np.concatenate((np.dot(C1[0], vec_s), np.dot(C1[1], vec_s)), axis=0)
-    train_Y = np.concatenate((data['Yh'].reshape(-1,1), data['Ym'].reshape(-1,1)), axis=0)
-    lasso.fit(train_X, train_Y)
-    S = lasso.predict(S.reshape(-1, 1)).reshape(data['N'][0,0], Ym_L)
+        # 計算lasso及ridge regression
+        lasso = linear_model.Lasso(alpha=0.1, max_iter=1)
+        train_X = np.concatenate((np.dot(C1[0], vec_s), np.dot(C1[1], vec_s)), axis=0)
+        train_Y = np.concatenate((data['Yh'].reshape(-1,1), data['Ym'].reshape(-1,1)), axis=0)
+        lasso.fit(train_X, train_Y)
+        S = lasso.predict(S.reshape(-1, 1)).reshape(data['N'][0,0], Ym_L)
 
-    ridge = linear_model.Ridge(alpha=0.1, max_iter=1)
-    train_X = np.concatenate((np.dot(C2[0], vec_a), np.dot(C2[1], vec_a)), axis=0)
-    train_Y = np.concatenate((data['Yh'].reshape(-1,1), data['Ym'].reshape(-1,1)), axis=0)
-    ridge.fit(train_X, train_Y)
-    A = ridge.predict(S.reshape(-1, 1)).reshape(Yh_M, data['N'][0,0])
+        ridge = linear_model.Ridge(alpha=0.1, max_iter=1)
+        train_X = np.concatenate((np.dot(C2[0], vec_a), np.dot(C2[1], vec_a)), axis=0)
+        train_Y = np.concatenate((data['Yh'].reshape(-1,1), data['Ym'].reshape(-1,1)), axis=0)
+        ridge.fit(train_X, train_Y)
+        A = ridge.predict(S.reshape(-1, 1)).reshape(Yh_M, data['N'][0,0])
 
-    new_Z = np.dot(A, S)
-    plot(new_Z, "result_1_iter")
+        new_Z = np.dot(A, S)
+        plot(new_Z, f"result_{epoch}_iter")
 
-    end = datetime.datetime.now()
-    print(f"Total Cost: {end-start}")
+        end = datetime.datetime.now()
+        print(f"Lasso score:{lasso.score(train_X, train_Y)}, Ridge score:{ridge.score(train_X, train_Y)}")
+        print(f"{epoch} iter cost time: {end-start}")
 
 
 def get_gaussian_array(x1, x2):
@@ -115,7 +119,7 @@ def kronecker_product(arr1, arr2):
 
 if __name__ == "__main__":
     # 比較自己kron跟numpy的速度
-    main(kronecker_product = lambda x, y: np.kron(x,y))
+    #main(kronecker_product = lambda x, y: np.kron(x,y))
     main(kronecker_product = lambda x, y: kronecker_product(x,y))
 
     #arr1 = np.array([
