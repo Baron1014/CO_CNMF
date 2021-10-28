@@ -28,9 +28,11 @@ def main(kronecker_product):
     Ym_L,Ym_M = (data["Ym"].shape[0])**2, data["Ym"].shape[2]
     Yh_L,Yh_M = (data["Yh"].shape[0])**2, data["Yh"].shape[2]
 
-    # init A, S, B
-    A = get_gaussian_array(Yh_M, data['N'][0,0])
-    S = get_gaussian_array(data['N'][0,0], Ym_L)
+    # init A, S, B, N
+    #N = data['N'][0,0]
+    N = 3
+    A = get_gaussian_array(Yh_M, N)
+    S = get_gaussian_array(N, Ym_L)
     B = get_gaussian_array(Ym_L, Yh_L)
     print(A.shape, S.shape)
 
