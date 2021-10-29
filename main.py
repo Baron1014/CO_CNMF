@@ -6,8 +6,13 @@ from tqdm import tqdm
 from sklearn import linear_model
 import cv2
 import datetime 
+import wandb
 
 def main(kronecker_product):
+    # init wandb run
+    run = wandb.init(project='CO_CNMF',
+                        entity='Baron'
+                        )
     data = scipy.io.loadmat("data.mat")
     print(data.keys())
     print(f"Ym : {data['Ym'].shape}")
@@ -81,6 +86,8 @@ def main(kronecker_product):
         end = datetime.datetime.now()
         print(f"Lasso score:{lasso.score(train_X, train_Y)}, Ridge score:{ridge.score(train_X, train_Y)}")
         print(f"{epoch} iter cost time: {end-start}")
+        wandb.summary['Lasso score'] = lasso.score(train_X, train_Y) 
+        wandb.summary['Ridge score'] = ridge.score(train_X, train_Y) 
 
 
 def get_gaussian_array(x1, x2):
