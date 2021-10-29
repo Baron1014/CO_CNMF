@@ -113,12 +113,17 @@ def main(kronecker_product):
                 new_Z = np.dot(A, S).T
                 if j==0:
                     row_z = new_Z
+                else:
+                    row_z = np.concatenate((row_z, new_Z), axis=0)
+                
+                # 累積S及Ａ
+                if j==0 and i==0:
                     sum_S = update_S
                     sum_A = update_A
                 else:
-                    row_z = np.concatenate((row_z, new_Z), axis=0)
                     sum_A += update_A
                     sum_S += update_S
+
                 print(f"row_z: {row_z.shape}")
             # 疊加每一個row_z
             if i==0:
