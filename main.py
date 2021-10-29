@@ -57,7 +57,6 @@ def main(kronecker_product):
     # 小圖的寬及高
     small_yh_size, small_ym_size = int(data['Yh'].shape[0]/small_ratio), int(data['Ym'].shape[0]/small_ratio) 
 
-    # epochs = 10
     epochs = 10
     for epoch in range(epochs): 
         start = datetime.datetime.now()
@@ -95,13 +94,13 @@ def main(kronecker_product):
                 train_X = np.concatenate((np.dot(C1[0].T, vec_s), np.dot(C1[1], vec_s)), axis=0)
                 train_Y = np.concatenate((Yh_small.reshape(-1,1), Ym_small.reshape(-1,1)), axis=0)
                 lasso.fit(train_X, train_Y)
-                S = lasso.predict(S.reshape(-1, 1)).reshape(N, Ym_L)
+                update_S = lasso.predict(S.reshape(-1, 1)).reshape(N, Ym_L)
 
                 ridge = linear_model.Ridge(alpha=0.1, max_iter=1)
                 train_X = np.concatenate((np.dot(C2[0], vec_a), np.dot(C2[1], vec_a)), axis=0)
                 train_Y = np.concatenate((Yh_small.reshape(-1,1), Ym_small.reshape(-1,1)), axis=0)
                 ridge.fit(train_X, train_Y)
-                A = ridge.predict(A.reshape(-1, 1)).reshape(Yh_M, N)
+                update_A = ridge.predict(A.reshape(-1, 1)).reshape(Yh_M, N)
 
                 # evaluation
                 lasso_score = lasso.score(train_X, train_Y)
@@ -114,8 +113,12 @@ def main(kronecker_product):
                 new_Z = np.dot(A, S).T
                 if j==0:
                     row_z = new_Z
+                    sum_S = update_S
+                    sum_A = update_A
                 else:
                     row_z = np.concatenate((row_z, new_Z), axis=0)
+                    sum_A += update_A
+                    sum_S += update_S
                 print(f"row_z: {row_z.shape}")
             # 疊加每一個row_z
             if i==0:
@@ -124,6 +127,10 @@ def main(kronecker_product):
                 img_Z = np.concatenate((img_Z, row_z), axis=0)
             print(f"img_z: {img_Z.shape}")
 
+        # 更新A跟Ｓ
+        S = sum_S / (i+1)*(j+1)
+        A = sum_A / (i+1)*(j+1)
+        
         img_Z = img_Z.reshape(int(Origin_YmL**0.5), int(Origin_YmL**0.5), Yh_M)
         plot(img_Z, f"result_{epoch}_iter")
 
