@@ -29,13 +29,22 @@ def main(kronecker_product):
     plot(data["Yh"], "Yh")
     plot(data["Ym"], "Ym", [2, 1, 0])
 
+    # 將資料縮小(init)
+    small_ratio = 10
+    Ym_small = data["Ym"][:21, :21, :]
+    Yh_small = data["Yh"][:3, :3, :]
+    print(f"Ym_small: {Ym_small.shape}, Yh_small: {Yh_small.shape}")
+    
     # 取得Ym及Yh的L及M
-    Ym_L,Ym_M = (data["Ym"].shape[0])**2, data["Ym"].shape[2]
-    Yh_L,Yh_M = (data["Yh"].shape[0])**2, data["Yh"].shape[2]
+    Ym_L,Ym_M = (Ym_small.shape[0])**2, Ym_small.shape[2]
+    Yh_L,Yh_M = (Yh_small.shape[0])**2, Yh_small.shape[2]
+
+    # 取得原本Ym 的spatial
+    Origin_YmL = (data['Ym'].shape[0])**2
 
     # init A, S, B, N
-    #N = data['N'][0,0]
-    N = 3
+    N = data['N'][0,0]
+    #N = 3
     A = get_gaussian_array(Yh_M, N)
     S = get_gaussian_array(N, Ym_L)
     B = get_gaussian_array(Ym_L, Yh_L)
@@ -45,49 +54,84 @@ def main(kronecker_product):
     I_L = np.identity(Ym_L)
     I_M = np.identity(Yh_M)
 
+    # 小圖的寬及高
+    small_yh_size, small_ym_size = int(data['Yh'].shape[0]/small_ratio), int(data['Ym'].shape[0]/small_ratio) 
+
     # epochs = 10
     epochs = 10
     for epoch in range(epochs): 
         start = datetime.datetime.now()
-        # vec(Array)
-        vec_s = S.flatten('F').reshape(-1, 1)
-        vec_a = A.flatten('F').reshape(-1, 1)
-        print(f"vec_s: {vec_s.shape}, vec_a: {vec_a.shape}")
+        # init mean score
+        lasso_mean = list()
+        ridge_mean = list()
+        # 利用小圖片generate原圖
+        for i in range(small_ratio):
+            print(f"Start scan {i} row parts")
+            for j in range(small_ratio):
+                print(f"Start scan {i} row {j} col")
+                Ym_small = data["Ym"][i*small_ym_size:(i+1)*small_ym_size, j*small_ym_size:(j+1)*small_ym_size, :]
+                Yh_small = data["Yh"][i*small_yh_size:(i+1)*small_yh_size, j*small_yh_size:(j+1)*small_yh_size, :]
 
-        # get C
-        D = data['D']
-        print("start compute C1 ...")
-        C1 = list()
-        C1.append(kronecker_product(B.T, A).T)
-        C1.append(kronecker_product(I_L, np.dot(D,A)))
-        print(f"C1 = [{C1[0].shape}, {C1[1].shape} ]")
-        print("start compute C2 ...")
-        C2 = list()
-        C2.append(kronecker_product(np.dot(S,B).T, I_M))
-        C2.append(kronecker_product(S.T, D))
-        print(f"C2 = [{C2[0].shape}, {C2[1].shape} ]")
+                # vec(Array)
+                vec_s = S.flatten('F').reshape(-1, 1)
+                vec_a = A.flatten('F').reshape(-1, 1)
+                print(f"vec_s: {vec_s.shape}, vec_a: {vec_a.shape}")
 
-        # 計算lasso及ridge regression
-        lasso = linear_model.Lasso(alpha=0.1, max_iter=1)
-        train_X = np.concatenate((np.dot(C1[0], vec_s), np.dot(C1[1], vec_s)), axis=0)
-        train_Y = np.concatenate((data['Yh'].reshape(-1,1), data['Ym'].reshape(-1,1)), axis=0)
-        lasso.fit(train_X, train_Y)
-        S = lasso.predict(S.reshape(-1, 1)).reshape(data['N'][0,0], Ym_L)
+                # get C
+                D = data['D']
+                print("start compute C1 ...")
+                C1 = list()
+                C1.append(kronecker_product(B.T, A).T)
+                C1.append(kronecker_product(I_L, np.dot(D,A)))
+                print(f"C1 = [{C1[0].shape}, {C1[1].shape} ]")
+                print("start compute C2 ...")
+                C2 = list()
+                C2.append(kronecker_product(np.dot(S,B).T, I_M))
+                C2.append(kronecker_product(S.T, D))
+                print(f"C2 = [{C2[0].shape}, {C2[1].shape} ]")
 
-        ridge = linear_model.Ridge(alpha=0.1, max_iter=1)
-        train_X = np.concatenate((np.dot(C2[0], vec_a), np.dot(C2[1], vec_a)), axis=0)
-        train_Y = np.concatenate((data['Yh'].reshape(-1,1), data['Ym'].reshape(-1,1)), axis=0)
-        ridge.fit(train_X, train_Y)
-        A = ridge.predict(S.reshape(-1, 1)).reshape(Yh_M, data['N'][0,0])
+                # 計算lasso及ridge regression
+                lasso = linear_model.Lasso(alpha=0.1, max_iter=1)
+                train_X = np.concatenate((np.dot(C1[0].T, vec_s), np.dot(C1[1], vec_s)), axis=0)
+                train_Y = np.concatenate((Yh_small.reshape(-1,1), Ym_small.reshape(-1,1)), axis=0)
+                lasso.fit(train_X, train_Y)
+                S = lasso.predict(S.reshape(-1, 1)).reshape(N, Ym_L)
 
-        new_Z = np.dot(A, S)
-        plot(new_Z, f"result_{epoch}_iter")
+                ridge = linear_model.Ridge(alpha=0.1, max_iter=1)
+                train_X = np.concatenate((np.dot(C2[0], vec_a), np.dot(C2[1], vec_a)), axis=0)
+                train_Y = np.concatenate((Yh_small.reshape(-1,1), Ym_small.reshape(-1,1)), axis=0)
+                ridge.fit(train_X, train_Y)
+                A = ridge.predict(A.reshape(-1, 1)).reshape(Yh_M, N)
+
+                # evaluation
+                lasso_score = lasso.score(train_X, train_Y)
+                ridge_score = ridge.score(train_X, train_Y)
+                print(f"Lasso score:{lasso_score}, Ridge score:{ridge_score}")
+                lasso_mean.append(lasso_score)
+                ridge_mean.append(ridge_score)
+
+                # 產生 small_z 影像
+                new_Z = np.dot(A, S).T
+                if j==0:
+                    row_z = new_Z
+                else:
+                    row_z = np.concatenate((row_z, new_Z), axis=0)
+                print(f"row_z: {row_z.shape}")
+            # 疊加每一個row_z
+            if i==0:
+                img_Z = row_z
+            else:
+                img_Z = np.concatenate((img_Z, row_z), axis=0)
+            print(f"img_z: {img_Z.shape}")
+
+        img_Z = img_Z.reshape(int(Origin_YmL**0.5), int(Origin_YmL**0.5), Yh_M)
+        plot(img_Z, f"result_{epoch}_iter")
 
         end = datetime.datetime.now()
-        print(f"Lasso score:{lasso.score(train_X, train_Y)}, Ridge score:{ridge.score(train_X, train_Y)}")
+        print(f"Total Lasso score:{sum(lasso_mean)/len(lasso_mean)}, Total Ridge score:{sum(ridge_mean)/len(ridge_mean)}")
         print(f"{epoch} iter cost time: {end-start}")
-        wandb.summary['Lasso score'] = lasso.score(train_X, train_Y) 
-        wandb.summary['Ridge score'] = ridge.score(train_X, train_Y) 
+        wandb.summary[f'Lasso score {epoch}'] = sum(lasso_mean)/len(lasso_mean) 
+        wandb.summary[f'Ridge score {epoch}'] = sum(ridge_mean)/len(ridge_mean)
 
 
 def get_gaussian_array(x1, x2):
