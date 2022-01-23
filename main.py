@@ -6,13 +6,8 @@ from tqdm import tqdm
 from sklearn import linear_model
 import cv2
 import datetime 
-import wandb
 
 def main(kronecker_product):
-    # init wandb run
-    run = wandb.init(project='CO_CNMF',
-                        entity='Baron'
-                        )
     data = scipy.io.loadmat("data.mat")
     print(data.keys())
     print(f"Ym : {data['Ym'].shape}")
@@ -24,22 +19,22 @@ def main(kronecker_product):
     print(data["N"])
     print(data["symvar"])
 
-    # 畫raw data
+    # plt raw data
     plot(data["I_REF"], "Target")
     plot(data["Yh"], "Yh")
     plot(data["Ym"], "Ym", [2, 1, 0])
 
-    # 將資料縮小(init)
+    # reduce data size(init)
     small_ratio = 10
     Ym_small = data["Ym"][:21, :21, :]
     Yh_small = data["Yh"][:3, :3, :]
     print(f"Ym_small: {Ym_small.shape}, Yh_small: {Yh_small.shape}")
     
-    # 取得Ym及Yh的L及M
+    # Get L and M of Ym and Yh
     Ym_L,Ym_M = (Ym_small.shape[0])**2, Ym_small.shape[2]
     Yh_L,Yh_M = (Yh_small.shape[0])**2, Yh_small.shape[2]
 
-    # 取得原本Ym 的spatial
+    # get original spatial of Ym 
     Origin_YmL = (data['Ym'].shape[0])**2
 
     # init A, S, B, N
@@ -54,7 +49,7 @@ def main(kronecker_product):
     I_L = np.identity(Ym_L)
     I_M = np.identity(Yh_M)
 
-    # 小圖的寬及高
+    # The width and height of the small figure
     small_yh_size, small_ym_size = int(data['Yh'].shape[0]/small_ratio), int(data['Ym'].shape[0]/small_ratio) 
 
     epochs = 10
@@ -63,7 +58,7 @@ def main(kronecker_product):
         # init mean score
         lasso_mean = list()
         ridge_mean = list()
-        # 利用小圖片generate原圖
+        # Generate original image using small image
         for i in range(small_ratio):
             print(f"Start scan {i} row parts")
             for j in range(small_ratio):
@@ -89,7 +84,7 @@ def main(kronecker_product):
                 C2.append(kronecker_product(S.T, D))
                 print(f"C2 = [{C2[0].shape}, {C2[1].shape} ]")
 
-                # 計算lasso及ridge regression
+                # calculate lasso regression and ridge regression
                 lasso = linear_model.Lasso(alpha=0.1, max_iter=1)
                 train_X = np.concatenate((np.dot(C1[0].T, vec_s), np.dot(C1[1], vec_s)), axis=0)
                 train_Y = np.concatenate((Yh_small.reshape(-1,1), Ym_small.reshape(-1,1)), axis=0)
@@ -109,14 +104,14 @@ def main(kronecker_product):
                 lasso_mean.append(lasso_score)
                 ridge_mean.append(ridge_score)
 
-                # 產生 small_z 影像
+                # generate small_z image
                 new_Z = np.dot(A, S).T
                 if j==0:
                     row_z = new_Z
                 else:
                     row_z = np.concatenate((row_z, new_Z), axis=0)
                 
-                # 累積S及Ａ
+                # Accumulate S and A
                 if j==0 and i==0:
                     sum_S = update_S
                     sum_A = update_A
@@ -125,14 +120,14 @@ def main(kronecker_product):
                     sum_S += update_S
 
                 print(f"row_z: {row_z.shape}")
-            # 疊加每一個row_z
+            # accumulate each row_z
             if i==0:
                 img_Z = row_z
             else:
                 img_Z = np.concatenate((img_Z, row_z), axis=0)
             print(f"img_z: {img_Z.shape}")
 
-        # 更新A跟Ｓ
+        # update A and Ｓ
         S = sum_S / (i+1)*(j+1)
         A = sum_A / (i+1)*(j+1)
         
@@ -142,9 +137,7 @@ def main(kronecker_product):
         end = datetime.datetime.now()
         print(f"Total Lasso score:{sum(lasso_mean)/len(lasso_mean)}, Total Ridge score:{sum(ridge_mean)/len(ridge_mean)}")
         print(f"{epoch} iter cost time: {end-start}")
-        wandb.summary[f'Lasso score {epoch}'] = sum(lasso_mean)/len(lasso_mean) 
-        wandb.summary[f'Ridge score {epoch}'] = sum(ridge_mean)/len(ridge_mean)
-
+        
 
 def get_gaussian_array(x1, x2):
     return np.random.normal(loc=1, scale=2, size=(x1, x2))
@@ -158,22 +151,22 @@ def kronecker_product(arr1, arr2):
     arr2_w, arr2_col = arr2.shape[0], arr2.shape[1]
 
     for i in tqdm(range(arr1_w), desc="kronecker product"):
-        # arr1第i列乘完arr2的矩陣
+        # the matrix of multiplying column i of arr1 by arr2
         con_list = list()
         for c in range(arr1_col):
-            # 儲存跟arr1做完運算的結果
+            # store the result
             subblock = np.zeros((arr2_w, arr2_col))
             for ii in range(arr2_w):
                 for cc in range(arr2_col):
                     subblock[ii, cc] = arr1[i,c] * arr2[ii, cc]
 
-            # 連接每一個子區塊, 成為arr第i行的集合
+            # concatenate each subblock into the set of row i of arr
             if c==0:
                 arr1_row_block = subblock
             else:
                 arr1_row_block = np.concatenate((arr1_row_block, subblock), axis=1)
 
-        # 連接每i行的集合, 成為最後輸出
+        # concatenate the set of every i row into the final output
         if i==0:
             kron_array = arr1_row_block
         else:
@@ -183,33 +176,6 @@ def kronecker_product(arr1, arr2):
 
 
 if __name__ == "__main__":
-    # 比較自己kron跟numpy的速度
+    # Comparing the speed of my own method and numpy
     #main(kronecker_product = lambda x, y: np.kron(x,y))
     main(kronecker_product = lambda x, y: kronecker_product(x,y))
-
-    #arr1 = np.array([
-        #[1,2,3,4],
-        #[2,3,4,5],
-        #[3,4,5,6]
-    #])
-    #arr2 = np.array([
-        #[1,2,3,4],
-        #[1,2,3,4],
-        #[1,2,3,4]
-    #])
-    #arr3 = arr1 - arr2
-
-    #lasso = linear_model.Lasso(alpha=0.1, max_iter=1)
-    #lasso.fit(arr1.reshape(-1 ,1), arr2.reshape(-1, 1))
-    #score = lasso.score(arr1.reshape(-1 ,1), arr2.reshape(-1, 1))
-    #predict = lasso.predict(arr1.reshape(-1 ,1))
-    #print(arr1.reshape(1,-1))
-    #print(arr2.reshape(1,-1))
-    #print(predict)
-    #print(lasso.n_iter_)
-
-
-
-
-
-        
